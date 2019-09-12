@@ -207,11 +207,15 @@ public class HiveStatement implements java.sql.Statement {
   /**
    * Closes the statement if there is one running. Do not change the the flags.
    * @throws SQLException If there is an error closing the statement
+   *
+   *  CloseOperation 调用，关闭操作
+   *
    */
   private void closeStatementIfNeeded() throws SQLException {
     try {
       if (stmtHandle != null) {
         TCloseOperationReq closeReq = new TCloseOperationReq(stmtHandle);
+        // 关闭这个操作
         TCloseOperationResp closeResp = client.CloseOperation(closeReq);
         Utils.verifySuccessWithInfo(closeResp.getStatus());
         stmtHandle = null;
@@ -262,13 +266,17 @@ public class HiveStatement implements java.sql.Statement {
 
   @Override
   public boolean execute(String sql) throws SQLException {
+    // 异步执行sql
     runAsyncOnServer(sql);
+    // 等待操作完成
     TGetOperationStatusResp status = waitForOperationToComplete();
 
     // The query should be completed by now
+    // 如果没有resultSet对象
     if (!status.isHasResultSet() && !stmtHandle.isHasResultSet()) {
       return false;
     }
+    // 赋值resultSet
     resultSet = new HiveQueryResultSet.Builder(this).setClient(client)
         .setStmtHandle(stmtHandle).setMaxRows(maxRows).setFetchSize(fetchSize)
         .setScrollable(isScrollableResultset)
@@ -306,6 +314,7 @@ public class HiveStatement implements java.sql.Statement {
   }
 
   private void runAsyncOnServer(String sql) throws SQLException {
+    // 检查连接是否打开
     checkConnection("execute");
 
     reInitState();
@@ -317,8 +326,10 @@ public class HiveStatement implements java.sql.Statement {
      * in a background operation thread
      * Compilation can run asynchronously or synchronously and execution run asynchronously
      */
+    // 异步
     execReq.setRunAsync(true);
     execReq.setConfOverlay(sessConf);
+    // 超时
     execReq.setQueryTimeout(queryTimeout);
     try {
       TExecuteStatementResp execResp = client.ExecuteStatement(execReq);
@@ -357,13 +368,22 @@ public class HiveStatement implements java.sql.Statement {
     return statusResp;
   }
 
+  /**
+   *  轮训，等待结果的完成
+   *  服务器轮训超时时间设置： HIVE_SERVER2_LONG_POLLING_TIMEOUT
+   * @return
+   * @throws SQLException
+   */
   TGetOperationStatusResp waitForOperationToComplete() throws SQLException {
+
     TGetOperationStatusReq statusReq = new TGetOperationStatusReq(stmtHandle);
+    // 是否应该获取处理的进度，一般jdbc为false
     boolean shouldGetProgressUpdate = inPlaceUpdateStream != InPlaceUpdateStream.NO_OP;
     statusReq.setGetProgressUpdate(shouldGetProgressUpdate);
     if (!shouldGetProgressUpdate) {
       /**
        * progress bar is completed if there is nothing we want to request in the first place.
+       *  如果不应该获取处理进度，那么直接通知完成
        */
       inPlaceUpdateStream.getEventNotifier().progressBarCompleted();
     }
@@ -375,21 +395,30 @@ public class HiveStatement implements java.sql.Statement {
         /**
          * For an async SQLOperation, GetOperationStatus will use the long polling approach It will
          * essentially return after the HIVE_SERVER2_LONG_POLLING_TIMEOUT (a server config) expires
+         *
+         *  长轮训获取服务器处理的状态
+         *  服务器设置长轮训的超时时间 HIVE_SERVER2_LONG_POLLING_TIMEOUT 参数
          */
         statusResp = client.GetOperationStatus(statusReq);
         if(!isOperationComplete) {
+          // 如果未完成，更新进度条
           inPlaceUpdateStream.update(statusResp.getProgressUpdateResponse());
         }
+        // 检查状态是否是成功
         Utils.verifySuccessWithInfo(statusResp.getStatus());
+        // 如果设置了操作的状态
         if (statusResp.isSetOperationState()) {
+          // 判断服务器返回的操作的状态
           switch (statusResp.getOperationState()) {
           case CLOSED_STATE:
           case FINISHED_STATE:
+            // 关闭或者完成
             isOperationComplete = true;
             isLogBeingGenerated = false;
             break;
           case CANCELED_STATE:
             // 01000 -> warning
+            // 说明取消操作了
             String errMsg = statusResp.getErrorMessage();
             if (errMsg != null && !errMsg.isEmpty()) {
               throw new SQLException("Query was cancelled. " + errMsg, "01000");
@@ -397,16 +426,20 @@ public class HiveStatement implements java.sql.Statement {
               throw new SQLException("Query was cancelled", "01000");
             }
           case TIMEDOUT_STATE:
+            // 超时
             throw new SQLTimeoutException("Query timed out after " + queryTimeout + " seconds");
           case ERROR_STATE:
+            // 异常
             // Get the error details from the underlying exception
             throw new SQLException(statusResp.getErrorMessage(), statusResp.getSqlState(),
                 statusResp.getErrorCode());
           case UKNOWN_STATE:
+            // 未知
             throw new SQLException("Unknown query", "HY000");
           case INITIALIZED_STATE:
           case PENDING_STATE:
           case RUNNING_STATE:
+            // 初始化，待定，运行中则继续轮训
             break;
           }
         }
@@ -422,10 +455,16 @@ public class HiveStatement implements java.sql.Statement {
     /*
       we set progress bar to be completed when hive query execution has completed
     */
+    // 设置完成的进度条
     inPlaceUpdateStream.getEventNotifier().progressBarCompleted();
     return statusResp;
   }
 
+  /**
+   *  检查连接是否是开启
+   * @param action log信息
+   * @throws SQLException 异常
+   */
   private void checkConnection(String action) throws SQLException {
     if (isClosed) {
       throw new SQLException("Can't " + action + " after statement has been closed");
@@ -1002,6 +1041,8 @@ public class HiveStatement implements java.sql.Statement {
   /**
    * This is only used by the beeline client to set the stream on which in place progress updates
    * are to be shown
+   *
+   *  处理的进度
    */
   public void setInPlaceUpdateStream(InPlaceUpdateStream stream) {
     this.inPlaceUpdateStream = stream;

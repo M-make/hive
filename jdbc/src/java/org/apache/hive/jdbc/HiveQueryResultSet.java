@@ -230,7 +230,9 @@ public class HiveQueryResultSet extends HiveBaseResultSet {
       TGetResultSetMetadataReq metadataReq = new TGetResultSetMetadataReq(stmtHandle);
       // TODO need session handle
       TGetResultSetMetadataResp  metadataResp;
+      // 获取resultSetMetadata
       metadataResp = client.GetResultSetMetadata(metadataReq);
+      // 检查状态是否是成功
       Utils.verifySuccess(metadataResp.getStatus());
 
       TTableSchema schema = metadataResp.getSchema();
@@ -305,6 +307,8 @@ public class HiveQueryResultSet extends HiveBaseResultSet {
   /**
    * Moves the cursor down one row from its current position.
    *
+   *  调用next方法，后移指针，并且拉取一行记录 FetchResults
+   *
    * @see java.sql.ResultSet#next()
    * @throws SQLException
    *           if a database access error occurs.
@@ -341,6 +345,7 @@ public class HiveQueryResultSet extends HiveBaseResultSet {
         TFetchResultsReq fetchReq = new TFetchResultsReq(stmtHandle,
             orientation, fetchSize);
         TFetchResultsResp fetchResp;
+        // 拉取一行的数据
         fetchResp = client.FetchResults(fetchReq);
         Utils.verifySuccessWithInfo(fetchResp.getStatus());
 

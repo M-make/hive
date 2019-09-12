@@ -126,6 +126,8 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * HiveConnection.
  *
+ *  一个connection 对应 一个transport 对应 一个sessHandle
+ *
  */
 public class HiveConnection implements java.sql.Connection {
   public static final Logger LOG = LoggerFactory.getLogger(HiveConnection.class.getName());
