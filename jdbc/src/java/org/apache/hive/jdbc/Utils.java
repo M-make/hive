@@ -356,6 +356,7 @@ public class Utils {
 
     // For URLs with no other configuration
     // Don't parse them, but set embedded mode as true
+    // hive2 jdbc 使用内嵌模式
     if (uri.equalsIgnoreCase(URL_PREFIX)) {
       connParams.setEmbeddedMode(true);
       return connParams;
